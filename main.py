@@ -1,6 +1,6 @@
 from fastapi import FastAPI , Request
 from generator import generator
-from model import model
+from keras.models import load_model
 import tensorflow as tf
 import numpy as np
 import requests
@@ -21,7 +21,7 @@ print (image_np.shape)
 
 app = FastAPI()
 
-model.load_weights("model.keras")
+model = load_model("classification_model.keras")
 generator.load_weights("generator_weights.h5")
 
 def predict(image):
