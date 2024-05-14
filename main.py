@@ -9,6 +9,20 @@ from io import BytesIO
 import pydicom
 from pydicom.pixel_data_handlers.util import apply_voi_lut
 import cv2
+import numpy as np
+from pydicom.dataset import Dataset
+import pydicom
+from pydicom.dataset import Dataset, FileDataset
+from pydicom.uid import ExplicitVRLittleEndian
+import pydicom._storage_sopclass_uids
+import requests
+from io import BytesIO
+from pydicom import dcmread, dcmwrite
+from pydicom.filebase import DicomFileLike
+
+from pydicom.dataset import  FileMetaDataset
+from pydicom.sequence import Sequence
+
 
 # Read image
 image_pil = Image.open('0_114_test.png')
@@ -100,6 +114,23 @@ def pad_to_square(image, laterality):
     
     return padded_image 
 
+def send_to_orthanc(dataset):
+    # create a buffer
+    with BytesIO() as buffer:
+        # create a DicomFileLike object that has some properties of DataSet
+        memory_dataset = DicomFileLike(buffer)
+        # write the dataset to the DicomFileLike object
+        dcmwrite(memory_dataset, dataset)
+        # to read from the object, you have to rewind it
+        memory_dataset.seek(0)
+        # read the contents as bytes
+        binary_data=  memory_dataset.read()
+    porthanc=requests.post("http://localhost:8042/instances",data=binary_data,headers={"content-type":'application/dicom'})
+    print(porthanc.status_code)
+    print(porthanc.text)
+    return porthanc.status_code
+
+
 def preprocess_numpy(dcm,lat):
     # apply lut
     image = dcm.pixel_array
@@ -124,30 +155,77 @@ def preprocess_numpy(dcm,lat):
     g_img = tf.expand_dims(g_img, axis=0)
     generated = generator(g_img, training=False)
     generated = (generated[0]* 127.5 + 127.5)
-    cv2.imwrite('generat.jpg',generated.numpy() )
-    print(generated)
+    #cv2.imwrite('generat.jpg',generated.numpy() )
+    #print(generated)
     return generated.numpy()
 
 def create_dcm_pxlarray(pixel,dcm):
-    dcm.pixeldata=pixel[:,:,0].tobytes()
-    dcm.Rows,dcm.Columns=pixel.shape[0],pixel.shape[1]
-    dcm.save_as('modified.dcm')
+    meta = pydicom.Dataset()
+    meta.MediaStorageSOPClassUID = pydicom._storage_sopclass_uids.DigitalMammographyXRayImageStorageForPresentation
+    meta.MediaStorageSOPInstanceUID = pydicom.uid.generate_uid()
+    meta.TransferSyntaxUID = pydicom.uid.ExplicitVRLittleEndian  
 
+    ds = Dataset()
+    ds.file_meta = meta
+
+    ds.is_little_endian = True
+    ds.is_implicit_VR = False
+
+    ds.SOPClassUID = pydicom._storage_sopclass_uids.DigitalMammographyXRayImageStorageForPresentation
+    ds.PatientName = dcm.PatientName
+    ds.PatientID = dcm.PatientID
+
+    ds.Modality = "MG"
+    ds.SeriesInstanceUID = dcm.SeriesInstanceUID
+    ds.StudyInstanceUID = dcm.StudyInstanceUID
+    ds.SOPInstanceUID=pydicom.uid.generate_uid()
+    ds.FrameOfReferenceUID = pydicom.uid.generate_uid()
+
+    ds.BitsStored = 16
+    ds.BitsAllocated = 16
+    ds.SamplesPerPixel = 1
+    ds.HighBit = 15
+
+    ds.ImagesInAcquisition = "1"
+
+    ds.Rows = pixel.shape[0]
+    ds.Columns = pixel.shape[1]
+    ds.InstanceNumber = 1
+
+    ds.ImagePositionPatient = r"0\0\1"
+    ds.ImageOrientationPatient = r"1\0\0\0\-1\0"
+    ds.ImageType = r"DERIVED\SECONDARY"
+
+    ds.RescaleIntercept = "0"
+    ds.RescaleSlope = "1"
+    ds.PixelSpacing = r"1\1"
+    ds.PhotometricInterpretation = "MONOCHROME2"
+    ds.PixelRepresentation = 1
+
+    pydicom.dataset.validate_file_meta(ds.file_meta, enforce_standard=True)
+
+    print("Setting pixel data...")
+    ds.PixelData = pixel[:,:,0].astype(np.uint16).tobytes()
+    print("tags",ds.PatientID,ds.StudyInstanceUID,ds.SeriesInstanceUID)
+    # send to orthanc
+    ds.save_as("outputfile.dcm")
+    dataset=pydicom.dcmread('outputfile.dcm',force=True)
+    try: 
+        code= send_to_orthanc(ds)
+    except Exception as e:
+        print (e)
+    
+    return code
+
+    
 
 @app.post("/instanceid")
 async def root(request: Request):
     body = await request.json()
     instanceid=body["instanceid"]
     response=requests.get(f"http://localhost:8042/instances/{instanceid}/file")
-    image_array_response= requests.get(f"http://localhost:8042/instances/{instanceid}/numpy")
-    print(image_array_response)
-    array=np.load(BytesIO(image_array_response.content))
-    print(array.max())
-    print(array.shape)
     dcm = pydicom.dcmread(BytesIO(response.content))
     laterality=dcm.ImageLaterality
-    generator_img=preprocess_numpy(dcm,laterality)
-    create_dcm_pxlarray(generator_img,dcm)
     image = preprocess_dicom(dcm)
     # print (dcm.)
     pred=predict(image)
@@ -157,3 +235,16 @@ async def root(request: Request):
         pred=False
 
     return {"classification":pred, "laterality": dcm.ImageLaterality }
+
+@app.post("/generate")
+async def root(request: Request):
+    body = await request.json()
+    instanceid=body["instanceid"]
+    response=requests.get(f"http://localhost:8042/instances/{instanceid}/file")
+    dcm = pydicom.dcmread(BytesIO(response.content))
+    laterality=dcm.ImageLaterality
+    image_array_response= requests.get(f"http://localhost:8042/instances/{instanceid}/numpy")
+    array=np.load(BytesIO(image_array_response.content))
+    generator_img=preprocess_numpy(dcm,laterality)
+    code= create_dcm_pxlarray(generator_img,dcm)
+    return {"generation_code":code }
