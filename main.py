@@ -155,7 +155,10 @@ def preprocess_numpy(dcm,lat):
     g_img = tf.expand_dims(g_img, axis=0)
     generated = generator(g_img, training=False)
     generated = (generated[0]* 127.5 + 127.5)
-    #cv2.imwrite('generat.jpg',generated.numpy() )
+    
+    img = g_img[0] * 127.5 + 127.5
+    cv2.imwrite('image.jpg',img.numpy())
+    cv2.imwrite('generated.jpg',generated.numpy())
     #print(generated)
     return generated.numpy()
 
@@ -208,10 +211,10 @@ def create_dcm_pxlarray(pixel,dcm):
     ds.PixelData = pixel[:,:,0].astype(np.uint16).tobytes()
     print("tags",ds.PatientID,ds.StudyInstanceUID,ds.SeriesInstanceUID)
     # send to orthanc
-    ds.save_as("outputfile.dcm")
+    ds.save_as("outputfile.dcm", write_like_original=False)
     dataset=pydicom.dcmread('outputfile.dcm',force=True)
     try: 
-        code= send_to_orthanc(ds)
+        code= send_to_orthanc(dataset)
     except Exception as e:
         print (e)
     
