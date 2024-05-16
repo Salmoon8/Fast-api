@@ -208,7 +208,7 @@ def create_dcm_pxlarray(pixel,dcm):
     ds.PixelData = pixel[:,:,0].astype(np.uint16).tobytes()
     print("tags",ds.PatientID,ds.StudyInstanceUID,ds.SeriesInstanceUID)
     # send to orthanc
-    ds.save_as("outputfile.dcm", write_like_original=False)
+    ds.save_as("outputfile.dcm",write_like_original=False)
     dataset=pydicom.dcmread('outputfile.dcm',force=True)
     try: 
         request_thread = threading.Thread(target=send_to_orthanc, args=(ds,))
