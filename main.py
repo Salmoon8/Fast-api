@@ -211,7 +211,7 @@ def create_dcm_pxlarray(pixel,dcm):
     ds.save_as("outputfile.dcm",write_like_original=False)
     dataset=pydicom.dcmread('outputfile.dcm',force=True)
     try: 
-        request_thread = threading.Thread(target=send_to_orthanc, args=(ds,))
+        request_thread = threading.Thread(target=send_to_orthanc, args=(dataset,))
         request_thread.start()
     except Exception as e:
         print (e)

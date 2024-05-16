@@ -1,0 +1,24 @@
+import requests
+import pydicom
+from io import BytesIO
+from pydicom import dcmread, dcmwrite
+from pydicom.filebase import DicomFileLike
+
+output=pydicom.dcmread('out.dcm',force=True)
+
+def write_dataset_to_bytes(dataset):
+    # create a buffer
+    with BytesIO() as buffer:
+        # create a DicomFileLike object that has some properties of DataSet
+        memory_dataset = DicomFileLike(buffer)
+        # write the dataset to the DicomFileLike object
+        dcmwrite(memory_dataset, dataset)
+        # to read from the object, you have to rewind it
+        memory_dataset.seek(0)
+        # read the contents as bytes
+        return memory_dataset.read()
+
+
+porthanc=requests.post("http://localhost:8042/instances",data=write_dataset_to_bytes(output),headers={"content-type":'application/dicom'})
+
+print(porthanc.text)
