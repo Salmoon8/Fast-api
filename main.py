@@ -22,6 +22,7 @@ from pydicom.filebase import DicomFileLike
 
 from pydicom.dataset import  FileMetaDataset
 from pydicom.sequence import Sequence
+import threading
 
 
 # Read image
@@ -183,18 +184,14 @@ def create_dcm_pxlarray(pixel,dcm):
     ds.StudyInstanceUID = dcm.StudyInstanceUID
     ds.SOPInstanceUID=pydicom.uid.generate_uid()
     ds.FrameOfReferenceUID = pydicom.uid.generate_uid()
-
     ds.BitsStored = 16
     ds.BitsAllocated = 16
     ds.SamplesPerPixel = 1
     ds.HighBit = 15
-
     ds.ImagesInAcquisition = "1"
-
     ds.Rows = pixel.shape[0]
     ds.Columns = pixel.shape[1]
     ds.InstanceNumber = 1
-
     ds.ImagePositionPatient = r"0\0\1"
     ds.ImageOrientationPatient = r"1\0\0\0\-1\0"
     ds.ImageType = r"DERIVED\SECONDARY"
@@ -214,11 +211,12 @@ def create_dcm_pxlarray(pixel,dcm):
     ds.save_as("outputfile.dcm", write_like_original=False)
     dataset=pydicom.dcmread('outputfile.dcm',force=True)
     try: 
-        code= send_to_orthanc(dataset)
+        request_thread = threading.Thread(target=send_to_orthanc, args=(ds,))
+        request_thread.start()
     except Exception as e:
         print (e)
     
-    return code
+    return "awaiting generation"
 
     
 
