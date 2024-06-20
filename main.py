@@ -178,7 +178,9 @@ def create_dcm_pxlarray(pixel,dcm):
     ds.SOPClassUID = pydicom._storage_sopclass_uids.DigitalMammographyXRayImageStorageForPresentation
     ds.PatientName = dcm.PatientName
     ds.PatientID = dcm.PatientID
-
+    ds.ImageLaterality= dcm.ImageLaterality
+    ds.ViewPosition=dcm.ViewPosition
+    print(dcm.ImageLaterality,dcm.ViewPosition)
     ds.Modality = "MG"
     ds.SeriesInstanceUID = dcm.SeriesInstanceUID
     ds.StudyInstanceUID = dcm.StudyInstanceUID
